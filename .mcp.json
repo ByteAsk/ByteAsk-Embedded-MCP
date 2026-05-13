@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "byteask-embedded-docs": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "byteask-embedded-mcp"
+      ],
+      "env": {}
+    }
+  }
+}

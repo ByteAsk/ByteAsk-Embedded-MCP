@@ -1,0 +1,45 @@
+[project]
+name = "byteask-embedded-mcp"
+version = "0.1.0"
+description = "Open-source MCP server for source-grounded, page-cited evidence retrieval (the server behind ByteAsk Embedded Docs)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ByteAsk" }]
+keywords = ["mcp", "model-context-protocol", "fastmcp", "embedded", "firmware", "llm", "tools"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Software Development :: Libraries",
+]
+
+# Lower bounds here; exact versions are pinned in uv.lock for reproducible installs.
+# mcp is pinned <2 because the 2.x line (alpha as of 2026) carries breaking changes.
+dependencies = [
+    "mcp[cli]>=1.27,<2",
+    "python-dotenv>=1.0",
+    "uvicorn>=0.30",
+]
+
+[project.urls]
+Homepage = "https://docs.byteask.ai/embedded"
+Repository = "https://github.com/ByteAsk/ByteAsk-Embedded-MCP"
+
+[project.scripts]
+byteask-embedded-mcp = "byteask_embedded_mcp.server:main"
+
+# Dev/test tools. uv installs the `dev` group by default on `uv sync`.
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/byteask_embedded_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
