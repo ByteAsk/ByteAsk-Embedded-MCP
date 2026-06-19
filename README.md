@@ -2,6 +2,12 @@
 
 [![smithery badge](https://smithery.ai/badge/kulkarnianirudha8/byteaskai)](https://smithery.ai/servers/kulkarnianirudha8/byteaskai)
 
+
+Official MCP Registry Namespace: `ai.byteask/embedded-docs`
+
+Remote MCP Endpoint:
+https://mcp.byteask.ai/mcp
+
 The open-source **MCP server** behind [ByteAsk Embedded Docs](https://docs.byteask.ai/embedded):
 a **source-grounded, page-cited evidence-retrieval** server for coding agents
 (Claude Code, Codex, Cursor) that write firmware / driver / protocol code and
