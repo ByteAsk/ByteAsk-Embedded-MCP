@@ -1,8 +1,8 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "ai.byteask/embedded-docs",
-  "description": "Page-cited retrieval over primary-source embedded/firmware references for coding agents. Returns verbatim cited spec text or an honest 'no confident match', never a guessed register value.",
-  "version": "1.0.0",
+  "description": "Page-cited retrieval for embedded docs, datasheets, MISRA, CMSIS, and RTOS references.",
+  "version": "1.0.1",
   "websiteUrl": "https://docs.byteask.ai/embedded",
   "repository": {
     "url": "https://github.com/ByteAsk/ByteAsk-Embedded-MCP",
