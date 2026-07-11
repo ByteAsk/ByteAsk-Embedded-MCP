@@ -34,8 +34,8 @@ document is treated equally: no authority layer, no filters.
 
 > [!NOTE]
 > **What's in this repo:** the MCP *server* — tools, transports (stdio + Streamable
-> HTTP), bearer auth, DNS-rebinding protection, result rendering — plus a small,
-> pluggable retrieval interface.
+> HTTP), LIME OAuth 2.1 resource-server auth, DNS-rebinding protection, result
+> rendering — plus a small, pluggable retrieval interface.
 >
 > **What's _not_ in this repo:** the retrieval engine and the document corpus. How
 > documents are parsed, chunked, embedded, and ranked, and the licensed source
@@ -150,6 +150,39 @@ BYTEASK_BACKEND="my_pkg.my_module:make_backend"
 
 The exact return-value contracts are documented at the top of `backend.py`.
 
+## Authentication with LIME
+
+The hosted endpoint (`https://mcp.byteask.ai/mcp`) uses **LIME OAuth 2.1** as the
+authorization server. **LIME is a non-standard OAuth 2.1 provider for M2M agents.**
+No browser redirects. Agents obtain an MCP JWT via
+`POST /modules/oauth/token` with `X-Agent-Token` and an empty body, or via the SDK.
+
+Protected Resource Metadata: `GET /.well-known/oauth-protected-resource`.
+
+See [docs/AUTH.md](docs/AUTH.md) for operator configuration and agent runbooks.
+
+### Option A — SDK as MCP client (recommended)
+
+```python
+from lime_agents import LimeAgent
+
+agent = LimeAgent(agent_token=os.environ["LIME_AGENT_TOKEN"])
+tools = await agent.list_tools("https://mcp.byteask.ai/mcp")
+result = await agent.call_tool(
+    "https://mcp.byteask.ai/mcp",
+    "search_docs",
+    {"query": "STM32", "limit": 5},
+)
+await agent.aclose()
+```
+
+### Option B — Manual token (low-level HTTP)
+
+```python
+jwt = (await agent.get_mcp_access_token()).access_token
+# Authorization: Bearer {jwt} on POST /mcp
+```
+
 ## Configuration
 
 All settings are environment variables (loaded from `.env`; see [`.env.example`](.env.example)).
@@ -160,7 +193,11 @@ All settings are environment variables (loaded from `.env`; see [`.env.example`]
 | `BYTEASK_LOGS` | `logs` | where query / request JSONL logs are written |
 | `MCP_TRANSPORT` | `stdio` | `stdio` (local agents) or `http` |
 | `MCP_HTTP_HOST` / `MCP_HTTP_PORT` | `127.0.0.1` / `8000` | HTTP bind address |
-| `MCP_HTTP_AUTH_TOKEN` | — | bearer token for HTTP (empty = unauthenticated, dev only) |
+| `MCP_AUTH_MODE` | `none` | `lime` (production), `legacy` (deprecated), or `none` (dev only) |
+| `MCP_RESOURCE_SERVER_URL` | — | required when `MCP_AUTH_MODE=lime` |
+| `LIME_BASE_URL` | `https://lime.pics` | LIME OAuth issuer |
+| `LIME_OAUTH_AUDIENCE` | `mcp` | JWT audience |
+| `MCP_HTTP_AUTH_TOKEN` | — | deprecated; legacy mode only |
 | `MCP_ALLOWED_HOSTS` | — | comma-separated hosts allowed in the `Host` header (`*` disables) |
 | `LOG_LEVEL` | `INFO` | stderr log verbosity |
 
@@ -168,14 +205,18 @@ All settings are environment variables (loaded from `.env`; see [`.env.example`]
 <summary><strong>Running over HTTP</strong></summary>
 
 ```bash
-MCP_TRANSPORT=http MCP_HTTP_AUTH_TOKEN=$(openssl rand -hex 32) \
-  uv run byteask-embedded-mcp --host 0.0.0.0 --port 8000
+# Production-style (LIME OAuth RS)
+MCP_AUTH_MODE=lime MCP_RESOURCE_SERVER_URL=http://127.0.0.1:8000 \
+  MCP_ALLOWED_HOSTS=127.0.0.1,localhost \
+  uv run byteask-embedded-mcp --transport http --host 0.0.0.0 --port 8000
+
+# Dev only (unauthenticated)
+MCP_AUTH_MODE=none uv run byteask-embedded-mcp --transport http
 ```
 
-Clients then send `Authorization: Bearer <token>`. The bundled bearer check is a
-shared-secret **stub** — replace it with real auth (OAuth 2.1 resource server, mTLS,
-or a trusted reverse proxy) before exposing publicly. DNS-rebinding protection stays
-on independently via `MCP_ALLOWED_HOSTS`.
+Agents authenticate with a LIME-issued MCP JWT (`Authorization: Bearer …`).
+See [docs/AUTH.md](docs/AUTH.md). DNS-rebinding protection stays on via
+`MCP_ALLOWED_HOSTS`.
 
 </details>
 
@@ -199,14 +240,16 @@ This repository is the open-source server that powers that endpoint.
 
 ```
 src/byteask_embedded_mcp/
-  server.py     # FastMCP app + 3 tools (search_docs, get_context, request_document)
+  server.py     # FastMCP factory + 3 tools (search_docs, get_context, request_document)
+  auth/         # LIME OAuth RS settings, verifier, agent context, build_mcp()
   backend.py    # SearchBackend protocol + in-memory SampleBackend (swap for real retrieval)
   render.py     # structured result -> compact markdown
-  http_auth.py  # Streamable HTTP entrypoint + stub bearer-token guard
+  http_auth.py  # Streamable HTTP entrypoint (lime / none / legacy dispatch)
   config.py     # server config (transport, logging, backend selection)
   schemas.py    # Hit / Section result types
-  obs.py        # per-call JSONL logging
-tests/          # offline unit tests (renderer, backend, server tools)
+  obs.py        # per-call JSONL logging + agent_id helper
+docs/           # AUTH.md, AUTH_DESIGN.md, AUTH_TEST_MATRIX.md
+tests/          # offline unit tests (renderer, backend, server tools, auth matrix)
 assets/         # README demo GIF + its deterministic generator
 ```
 
@@ -214,9 +257,11 @@ assets/         # README demo GIF + its deterministic generator
 
 - **stdout stays clean** in stdio mode (it is the JSON-RPC channel); all logs go to
   stderr / `logs/*.jsonl`.
-- The HTTP **bearer check is a stub** — unauthenticated if no token is set, a shared
-  secret at best. Harden it before exposing widely.
+- **Production HTTP** uses LIME OAuth 2.1 (`MCP_AUTH_MODE=lime`); never expose
+  `MCP_AUTH_MODE=none` publicly.
+- **Legacy shared-secret** mode (`MCP_HTTP_AUTH_TOKEN`) is deprecated for one release.
 - **DNS-rebinding protection** is on by default for the HTTP transport.
+- **Never log raw JWTs**; structured logs use `agent_id` (`sub`) only.
 
 ## Contributing
 

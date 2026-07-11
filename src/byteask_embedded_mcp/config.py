@@ -31,6 +31,8 @@ class Config:
 
     root: Path
     log_dir: Path
+    http_host: str
+    http_port: int
 
     # Dotted "module:callable" returning a SearchBackend, called with this Config.
     # Empty -> the bundled in-memory SampleBackend. See backend.load_backend.
@@ -51,5 +53,7 @@ class Config:
         return cls(
             root=root,
             log_dir=logs if logs.is_absolute() else root / logs,
+            http_host=_env("MCP_HTTP_HOST", "127.0.0.1"),
+            http_port=int(_env("MCP_HTTP_PORT", "8000")),
             backend_factory=_env("BYTEASK_BACKEND", ""),
         )
