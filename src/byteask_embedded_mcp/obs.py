@@ -58,6 +58,16 @@ class QueryLogger:
         )
 
 
+def with_agent_context(record: dict[str, Any]) -> dict[str, Any]:
+    """Attach ``agent_id`` from the current FastMCP auth context when present."""
+    from .auth.agent_context import current_agent_id
+
+    aid = current_agent_id()
+    if aid:
+        record["agent_id"] = aid
+    return record
+
+
 def configure_stderr_logging(level: str = "INFO") -> None:
     logging.basicConfig(
         stream=sys.stderr,

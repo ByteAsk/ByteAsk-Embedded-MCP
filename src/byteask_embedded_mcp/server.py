@@ -25,9 +25,10 @@ import os
 
 from mcp.server.fastmcp import FastMCP
 
+from .auth import AuthConfig, build_mcp, current_agent_id
 from .backend import load_backend
 from .config import Config
-from .obs import JsonlWriter, configure_stderr_logging
+from .obs import JsonlWriter, configure_stderr_logging, with_agent_context
 from .render import render_context, render_search
 
 logger = logging.getLogger("byteask_embedded_mcp")
@@ -90,41 +91,6 @@ REQUEST_DOCUMENT_DESCRIPTION = (
     "document is typically added within 24 hours."
 )
 
-
-def _transport_security():
-    """Build DNS-rebinding protection settings from the environment.
-
-    The Streamable HTTP transport rejects requests whose ``Host`` header is not
-    explicitly allowed. Behind a reverse proxy the production requests arrive with
-    the public host (e.g. ``mcp.byteask.ai``), so that host must be allow-listed
-    via ``MCP_ALLOWED_HOSTS`` (comma-separated). Loopback is always permitted. Set
-    ``MCP_ALLOWED_HOSTS=*`` to disable host validation entirely.
-    """
-    from mcp.server.transport_security import TransportSecuritySettings
-
-    raw_hosts = os.getenv("MCP_ALLOWED_HOSTS", "").strip()
-    if raw_hosts == "*":
-        return TransportSecuritySettings(enable_dns_rebinding_protection=False)
-
-    hosts = [h.strip() for h in raw_hosts.split(",") if h.strip()]
-    hosts += ["127.0.0.1", "localhost", "127.0.0.1:*", "localhost:*"]
-
-    raw_origins = os.getenv("MCP_ALLOWED_ORIGINS", "").strip()
-    origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
-
-    return TransportSecuritySettings(
-        enable_dns_rebinding_protection=True,
-        allowed_hosts=hosts,
-        allowed_origins=origins,
-    )
-
-
-mcp = FastMCP(
-    SERVER_NAME,
-    instructions=SERVER_INSTRUCTIONS,
-    transport_security=_transport_security(),
-)
-
 # Lazily-initialized singleton so importing the module (e.g. for tests/tooling)
 # never requires a backend to be ready or any network.
 _backend = None
@@ -137,31 +103,17 @@ def _svc():
     return _backend
 
 
-@mcp.tool(description=SEARCH_DOCS_DESCRIPTION)
 def search_docs(query: str, limit: int = 8, effort: str | None = None) -> str:
-    """Search the reference corpus; return verbatim, page-cited evidence.
-
-    The agent-facing description is ``SEARCH_DOCS_DESCRIPTION`` (composed from the
-    shared corpus + trigger constants above, so it cannot drift from the server
-    instructions).
-
-    Args:
-        query: Natural-language question OR an exact identifier (e.g. "0x10", "FC16",
-            "IEEE 1547 clause 6.4", a register name, a SCPI command, a part number).
-        limit: Max hits to return (default 8).
-        effort: Internal diagnostics tag; clients should leave this unset.
-    """
+    """Search the reference corpus; return verbatim, page-cited evidence."""
+    agent_id = current_agent_id()
+    logger.info("tool=search_docs agent_id=%s", agent_id)
     return render_search(_svc().search(query, limit=limit, effort=effort))
 
 
-@mcp.tool()
 def get_context(result_id: str, effort: str | None = None) -> str:
-    """Expand a previous search hit to its full verbatim section (markdown).
-
-    Args:
-        result_id: The result_id from a search_docs hit.
-        effort: Internal diagnostics tag; clients should leave this unset.
-    """
+    """Expand a previous search hit to its full verbatim section (markdown)."""
+    agent_id = current_agent_id()
+    logger.info("tool=get_context agent_id=%s", agent_id)
     return render_context(_svc().get_context(result_id, effort=effort))
 
 
@@ -186,27 +138,28 @@ def _do_request_document(request: str, effort: str | None = None) -> str:
             "Tell me which document to add: the title or standard number, a URL if you "
             "have one, and what you were looking for. I could not file an empty request."
         )
-    rec = {"tool": "request_document", "request": text}
+    rec = with_agent_context({"tool": "request_document", "request": text})
     if effort:  # only test/internal calls carry the tag; client records stay clean
         rec["effort"] = effort
     _doc_request_log().append(rec)
-    logger.info("document_request=%r effort=%s", text, effort)
+    agent_id = rec.get("agent_id")
+    logger.info("tool=request_document agent_id=%s document_request=%r effort=%s", agent_id, text, effort)
     return (
         "Request received. We review these and aim to add the document to the corpus "
         "within 24 hours. Try search_docs again later."
     )
 
 
-@mcp.tool(description=REQUEST_DOCUMENT_DESCRIPTION)
 def request_document(request: str, effort: str | None = None) -> str:
-    """File a request to add a missing document to the corpus (logged server-side).
-
-    Args:
-        request: One string with the document title / standard number, a URL if
-            available, edition / version, and what you were looking for.
-        effort: Internal diagnostics tag; clients should leave this unset.
-    """
+    """File a request to add a missing document to the corpus (logged server-side)."""
     return _do_request_document(request, effort=effort)
+
+
+def register_tools(mcp: FastMCP) -> None:
+    """Bind tool handlers to a FastMCP instance (auth kwargs are constructor-only)."""
+    mcp.tool(description=SEARCH_DOCS_DESCRIPTION)(search_docs)
+    mcp.tool()(get_context)
+    mcp.tool(description=REQUEST_DOCUMENT_DESCRIPTION)(request_document)
 
 
 def main() -> None:
@@ -221,12 +174,30 @@ def main() -> None:
 
     configure_stderr_logging(args.log_level)
 
+    auth = AuthConfig.load()
+    config = Config.load()
+    # CLI flags override env for bind address.
+    config = Config(
+        root=config.root,
+        log_dir=config.log_dir,
+        http_host=args.host,
+        http_port=args.port,
+        backend_factory=config.backend_factory,
+    )
+
+    mcp = build_mcp(
+        auth=auth,
+        config=config,
+        name=SERVER_NAME,
+        instructions=SERVER_INSTRUCTIONS,
+    )
+    register_tools(mcp)
+
     try:
         if args.transport == "http":
             from .http_auth import run_http
 
-            token = os.getenv("MCP_HTTP_AUTH_TOKEN", "").strip()
-            run_http(mcp, host=args.host, port=args.port, token=token)
+            run_http(mcp, auth=auth, config=config)
         else:
             logger.info("Starting %s over stdio", SERVER_NAME)
             mcp.run(transport="stdio")
