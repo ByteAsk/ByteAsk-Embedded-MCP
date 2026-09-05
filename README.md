@@ -4,7 +4,7 @@
 
 **Page-cited answers from embedded & firmware reference docs — for coding agents that can't afford to guess a register value.**
 
-[![smithery badge](https://smithery.ai/badge/kulkarnianirudha8/byteaskai)](https://smithery.ai/servers/kulkarnianirudha8/byteaskai)
+[![LightNow MCP capabilities](https://lightnow.ai/badge/ai.byteask/embedded-docs)](https://lightnow.ai/servers/ai.byteask/embedded-docs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white)](pyproject.toml)
 [![Model Context Protocol](https://img.shields.io/badge/Model_Context_Protocol-compatible-5FB3A3.svg)](https://modelcontextprotocol.io)
