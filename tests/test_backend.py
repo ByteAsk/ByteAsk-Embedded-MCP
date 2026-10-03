@@ -18,6 +18,13 @@ def test_search_hit():
     assert {"result_id", "doc_title", "section", "page", "page_end", "snippet"} <= top.keys()
 
 
+def test_search_identifier_with_underscore():
+    res = SampleBackend().search("SYST_CSR")
+    assert res["status"] == "ok"
+    assert res["count"] >= 1
+    assert res["results"][0]["result_id"] == "sample:cortex-m-systick"
+
+
 def test_search_no_match():
     res = SampleBackend().search("quarterly marketing budget")
     assert res["status"] == "no_match"

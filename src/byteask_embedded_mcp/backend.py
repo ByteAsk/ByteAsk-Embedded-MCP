@@ -146,15 +146,21 @@ class SampleBackend:
 
     @staticmethod
     def _tokens(text: str) -> set[str]:
-        return {t for t in "".join(
-            c.lower() if c.isalnum() else " " for c in text
-        ).split() if t}
+        words = "".join(
+            c.lower() if (c.isalnum() or c == "_") else " " for c in text
+        ).split()
+        tokens = set(words)
+        for w in words:
+            if "_" in w:
+                tokens.update(part for part in w.split("_") if part)
+        return tokens
 
     def search(self, query: str, limit: int = 8, effort: str | None = None) -> dict:
         q = self._tokens(query)
         scored: list[tuple[int, _SampleDoc]] = []
         for d in self._docs:
-            score = len(q & set(d.keywords))
+            kw = {t for k in d.keywords for t in self._tokens(k)}
+            score = len(q & kw)
             if score > 0:
                 scored.append((score, d))
         scored.sort(key=lambda x: x[0], reverse=True)
