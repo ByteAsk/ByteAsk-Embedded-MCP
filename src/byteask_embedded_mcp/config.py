@@ -25,6 +25,28 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def load_dotenv_if_present() -> None:
+    """Best-effort load of the project .env so every entrypoint picks up settings.
+
+    Real environment variables take precedence. Checks project root and current
+    working directory.
+    """
+    try:
+        from dotenv import load_dotenv
+
+        root = _project_root()
+        load_dotenv(root / ".env", override=False)
+        if Path.cwd() != root:
+            load_dotenv(Path.cwd() / ".env", override=False)
+    except Exception:
+        pass
+
+
+# Best-effort load on import so module-level configuration (e.g. FastMCP transport security)
+# picks up settings immediately.
+load_dotenv_if_present()
+
+
 @dataclass(frozen=True)
 class Config:
     """Resolved server configuration. Construct via :meth:`load`."""
@@ -38,18 +60,12 @@ class Config:
 
     @classmethod
     def load(cls) -> "Config":
+        load_dotenv_if_present()
         root = _project_root()
-        # Best-effort load of the project .env so every entrypoint (CLI, server)
-        # picks up the same settings. Real env vars take precedence.
-        try:
-            from dotenv import load_dotenv
-
-            load_dotenv(root / ".env", override=False)
-        except Exception:
-            pass
         logs = Path(_env("BYTEASK_LOGS", str(root / "logs")))
         return cls(
             root=root,
             log_dir=logs if logs.is_absolute() else root / logs,
             backend_factory=_env("BYTEASK_BACKEND", ""),
         )
+

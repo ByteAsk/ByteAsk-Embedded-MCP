@@ -26,7 +26,7 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 from .backend import load_backend
-from .config import Config
+from .config import Config, load_dotenv_if_present
 from .obs import JsonlWriter, configure_stderr_logging
 from .render import render_context, render_search
 
@@ -211,11 +211,13 @@ def request_document(request: str, effort: str | None = None) -> str:
 
 def main() -> None:
     """CLI entrypoint. Defaults to stdio; pass `--transport http` for HTTP."""
+    load_dotenv_if_present()
+    mcp.settings.transport_security = _transport_security()
     parser = argparse.ArgumentParser(prog=SERVER_NAME)
     parser.add_argument("--transport", choices=["stdio", "http"],
                         default=os.getenv("MCP_TRANSPORT", "stdio"))
     parser.add_argument("--host", default=os.getenv("MCP_HTTP_HOST", "127.0.0.1"))
-    parser.add_argument("--port", type=int, default=int(os.getenv("MCP_HTTP_PORT", "8000")))
+    parser.add_argument("--port", type=int, default=int(os.getenv("MCP_HTTP_PORT") or "8000"))
     parser.add_argument("--log-level", default=os.getenv("LOG_LEVEL", "INFO"))
     args = parser.parse_args()
 
